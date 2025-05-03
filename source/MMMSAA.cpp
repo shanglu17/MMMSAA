@@ -131,6 +131,7 @@ vector<PartitionResult> MMMSAA(vector<Task> &D, vector<vector<double>> &C, int M
                 // 计算新的通信代价矩阵
                 if(mergedSize>EN){
                     newC[i][j] = -1; // 如果合并后的类大小超过EN，则设置通信代价为-1 禁止合并
+                    newC[j][i] = -1; // 对称赋值
                 }
                 else{
                     newC[i][j] = getMaxCommCost(Kc[i], Kc[j], D, C); // 计算新的通信代价
@@ -205,8 +206,33 @@ vector<Task> buildNewD(int count)
     }
     return newD; // 返回新的任务集合
 }
+// 计算模块间通信代价
+double computeModuleC(const TaskSet &moduleA, const TaskSet &moduleB, const vector<Task> &D, const vector<vector<double>> &C)
+{
+    double totalCost = 0; // 初始化总通信代价
+    for (const auto &taskA : moduleA)
+    {
+        int indexA =getTaskIndex(D, taskA); // 找到taskA在D中的索引
+        for(const auto &taskB : moduleB)
+        {
+            int indexB = getTaskIndex(D, taskB); // 找到taskB在D中的索引
+            totalCost += C[indexA][indexB]; // 累加通信代价
+        }
+    }
+    return totalCost; // 返回总通信代价
+}
+// 获取任务在集合中的索引
+int getTaskIndex(const vector<Task> &D, const Task &task)
+{
+    auto it = find(D.begin(), D.end(), task); // 查找任务在集合中的位置
+    if (it != D.end())
+    {
+        return distance(D.begin(), it); // 返回索引
+    }
+    return -1; // 如果未找到，返回-1
+}
 // 打印划分结果
-void printPartitionResult(const vector<PartitionResult> &DE)
+void printPartitionResult(const vector<PartitionResult> &DE,const vector<Task>&D,const vector<vector<double>>&C)
 {
     for (const auto &[c, k, K] : DE)
     {
@@ -222,4 +248,13 @@ void printPartitionResult(const vector<PartitionResult> &DE)
         }
         cout << "}" << endl;
     }
+    const auto &[c,k,K]=DE.back(); // 获取最后一个结果
+    double totalCost = 0; // 初始化总通信代价
+    for(size_t i=0;i<K.size();++i){
+        for(size_t j=i+1;j<K.size();++j){
+            double commCost=computeModuleC(K[i],K[j],D,C); // 计算模块间通信代价
+            totalCost+=commCost; // 累加通信代价
+        }
+    }
+    cout<<"Final Communication Cost: "<<totalCost<<endl; // 打印最终通信代价
 }

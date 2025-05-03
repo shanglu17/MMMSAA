@@ -23,4 +23,6 @@ double getMaxCommCost(const TaskSet& set1, const TaskSet& set2, const vector<Tas
 vector<PartitionResult>MMMSAA(vector<Task>&D,vector<vector<double>>&C,int M,int EN); //MMMSAA算法
 vector<vector<double>>computeNewC(const Partition& Kc, const vector<Task>& D, const vector<vector<double>>& C); //计算新的通信代价矩阵
 vector<Task>buildNewD(int count); //构建新的任务集合
-void printPartitionResult(const vector<PartitionResult>& DE); //打印划分结果
+double computeModuleC(const TaskSet& moduleA, const TaskSet& moduleB, const vector<Task>& D, const vector<vector<double>>& C); //计算模块间通信代价
+int getTaskIndex(const vector<Task>& D, const Task& task); //获取任务在集合中的索引
+void printPartitionResult(const vector<PartitionResult> &DE,const vector<Task>&D,const vector<vector<double>>&C); //打印划分结果

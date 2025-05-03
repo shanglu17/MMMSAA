@@ -116,106 +116,55 @@ vector<PartitionResult> MMMSAA(vector<Task> &D, vector<vector<double>> &C, int M
     }
 
     // 如果通信代价降到0且类的数目大于M，则调用MMMSAA算法进行重新划分
-    while (k > M)
+    if (c<=0&&k>M)
     {
-        if (c == 0)
+        vector<Task> newD = buildNewD(k); // 构建新的任务集合
+        vector<vector<double>> newC (Kc.size(), vector<double>(Kc.size(), 0)); // 初始化新的通信代价矩阵
+        for (size_t i = 0; i < Kc.size(); ++i)
         {
-            // 1.将当前Kc的每个模块视为新任务
-            vector<Task> newD = buildNewD(Kc.size()); // 构建新的任务集合
-
-            // 2.计算新的通信代价矩阵
-            vector<vector<double>> newC = computeNewC(Kc, newD, C); // 计算新的通信代价矩阵
-
-            // 3.聚类，模块元素数量限制在EN内
-            auto updated_MMMSAA = [&](const vector<Task> &newD, const vector<vector<double>> &newC, const Partition &oldKc)
+            for(size_t j = 0; j < Kc.size(); ++j)
             {
-                // 统计每个新模块的原始任务
-                map<string, int> taskSize;
-                for (size_t i = 0; i < oldKc.size(); ++i)
-                {
-                    taskSize["G" + to_string(i)] = oldKc[i].size(); // 统计每个新模块的原始任务数
+                if(i==j) continue; // 跳过对角线元素
+
+                //合并后的原始任务数
+                int mergedSize = Kc[i].size() + Kc[j].size(); // 合并后的类大小
+                // 计算新的通信代价矩阵
+                if(mergedSize>EN){
+                    newC[i][j] = -1; // 如果合并后的类大小超过EN，则设置通信代价为-1 禁止合并
                 }
-                vector<PartitionResult> subDE; // 存储新的谱系图结果
-                double c2 = 1 + findMax(newC);    // 初始化新的通信代价阈值
-                int k2 = oldKc.size();         // 初始化新的类的数目
-                Partition Kc2(k2);             // 初始化新的类集合
-                for (const auto &t : newD)
-                {
-                    Kc2.push_back({t}); // 将每个新任务放入单独的类中
+                else{
+                    newC[i][j] = getMaxCommCost(Kc[i], Kc[j], D, C); // 计算新的通信代价
                 }
-                subDE.push_back({c2, k2, Kc2}); // 将初始结果加入新的谱系图
-                while (c2 > 0 && k2 > M)
-                {                           // 当新的通信代价阈值大于0且新的类的数目大于M时继续迭代
-                    bool merged = false;    // 标记是否有类被合并
-                    Partition newKc2 = Kc2; // 新的类集合
-
-                    for (size_t i = 0; i < Kc2.size(); ++i)
-                    {
-                        for (size_t j = i + 1; j < Kc2.size(); ++j)
-                        {
-                            const auto &Ki = Kc2[i]; // 获取第i个类
-                            const auto &Kj = Kc2[j]; // 获取第j个类
-
-                            double larc = getMaxCommCost(Ki, Kj, newD, newC); // 计算最大通信代价
-
-                            // 统计合并后的类大小
-                            int mergedSize = 0;
-                            for (const auto &task : Ki)
-                            {
-                                mergedSize += taskSize[task]; // 统计合并后的类大小
-                            }
-                            for (const auto &task : Kj)
-                            {
-                                mergedSize += taskSize[task]; // 统计合并后的类大小
-                            }
-                            // 如果最大通信代价大于等于阈值且合并后的类大小不超过EN，则进行合并
-                            if (larc >= c2 && mergedSize <= EN)
-                            {
-                                TaskSet mergedSet = Ki;                                  // 创建新的合并类
-                                mergedSet.insert(mergedSet.end(), Kj.begin(), Kj.end()); // 合并类
-
-                                newKc2.clear(); // 清空新的类集合
-                                for (size_t m = 0; m < Kc2.size(); ++m)
-                                {
-                                    if (m != i && m != j)
-                                    { // 如果不是被合并的类，则加入新的类集合
-                                        newKc2.push_back(Kc2[m]);
-                                    }
-                                }
-                                newKc2.push_back(mergedSet); // 将合并后的类加入新的类集合
-
-                                k2 = newKc2.size();             // 更新新的类的数目
-                                Kc2 = newKc2;                   // 更新新的类集合
-                                subDE.push_back({c2, k2, Kc2}); // 将新的结果加入谱系图
-                                merged = true;                  // 标记有类被合并
-                                break;                          // 退出内层循环
-                            }
-                        }
-                        if (merged)
-                            break; // 如果有类被合并，则退出外层循环
-                    }
-                    if (!merged)
-                    {
-                        c2--; // 如果没有类被合并，则降低通信代价阈值
-                    }
-                }
-                return subDE; // 返回新的谱系图结果
-            };
-            // 4.调用更新后的MMMSAA算法
-            auto newDE = updated_MMMSAA(newD, newC, Kc);     // 调用更新后的MMMSAA算法
-            if (newDE.back().k >= k) {
-                break; // 没有进一步减少类的数量，跳出死循环
             }
-            DE.insert(DE.end(), newDE.begin(), newDE.end()); // 将新的谱系图结果加入原有结果
-            
-            //更新Kc和k:根据newDE的最后聚类结果重新构造Kc
-            Kc=newDE.back().Kc; // 更新Kc为最后的聚类结果
-            k=newDE.back().k; // 更新k为最后的类的数目
-            D = newD;   // 保证后续使用的任务集合与Kc对应
-            C = newC;   // 保证通信矩阵和任务集合一致
         }
-        if (k <= M)
-            break; // 如果类的数目小于等于M，则退出循环
+        // 递归调用MMMSAA算法进行重新划分
+        vector<PartitionResult> subDE = MMMSAA(newD, newC, M, EN); 
+
+        //subDE中的任务名映射回原始任务组合
+        map<string, TaskSet> groupMap;
+        for (size_t i = 0; i < Kc.size(); ++i)
+        {
+            groupMap["G" + to_string(i)] = Kc[i];
+        }
+
+        // 将 subDE 中的任务重新映射回原任务集
+        for (auto &res : subDE)
+        {
+            Partition realKc;
+            for (const auto &group : res.Kc)
+            {
+                TaskSet expanded;
+                for (const auto &task : group)
+                {
+                    const auto &original = groupMap[task]; // task 为 Gx
+                    expanded.insert(expanded.end(), original.begin(), original.end());
+                }
+                realKc.push_back(expanded);
+            }
+            res.Kc = realKc;
+            res.k = realKc.size();
+        }
+        DE.insert(DE.end(), subDE.begin(), subDE.end()); // 将子谱系图结果添加到主谱系图中
     }
     return DE; // 返回谱系图结果
 }

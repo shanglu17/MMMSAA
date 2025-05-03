@@ -121,17 +121,37 @@ vector<PartitionResult> MMMSAA(vector<Task> &D, vector<vector<double>> &C, int M
         }
         if (!merged)
         {
+            //测试用例(1)的步长
             c--; // 如果没有类被合并，则降低通信代价阈值
+            // //测试用例(2)的步长
+            // c-=0.5; // 如果没有类被合并，则降低通信代价阈值
         }
     }
 
     // 如果通信代价降到0且类的数目大于M，则调用MMMSAA算法进行重新划分
     if (c <= 0 && k > M)
     {
-        auto newD = buildNewD(Kc);                       // 构建新的任务集合
-        auto newC = computeNewC(Kc, D, C);            // 计算新的通信代价矩阵
-        auto subDE = MMMSAA(newD, newC, M, EN);          // 递归调用MMMSAA算法
-        //subDE中的任务名映射回原始任务组合
+        auto newD = buildNewD(Kc);         // 构建新的任务集合
+        auto newC = computeNewC(Kc, D, C); // 计算新的通信代价矩阵
+        if (newD.size() == D.size())
+        {
+            bool same = true;
+            for (size_t i = 0; i < D.size(); ++i)
+            {
+                if (newD[i].id != D[i].id || newD[i].originalSize != D[i].originalSize)
+                {
+                    same = false;
+                    break;
+                }
+            }
+            if (same)
+            {
+                cerr << "No actual reduction after merging, breaking recursion at size = " << D.size() << endl;
+                return DE;
+            }
+        }
+        auto subDE = MMMSAA(newD, newC, M, EN); // 递归调用MMMSAA算法
+        // subDE中的任务名映射回原始任务组合
         map<string, TaskSet> groupMap;
         for (size_t i = 0; i < Kc.size(); ++i)
         {
@@ -161,30 +181,30 @@ vector<PartitionResult> MMMSAA(vector<Task> &D, vector<vector<double>> &C, int M
 }
 
 // 计算新的通信代价矩阵
-vector<vector<double>> computeNewC(const Partition &Kc, const vector<Task> &newD, const vector<vector<double>> &oldC)
+vector<vector<double>> computeNewC(const Partition &Kc, const vector<Task> &oldD, const vector<vector<double>> &oldC)
 {
     int n = Kc.size();                                    // 获取新的类的数目
     vector<vector<double>> newC(n, vector<double>(n, 0)); // 初始化新的通信代价矩阵
     map<string, int> taskIndexMap;                        // 任务ID到索引的映射
-    for (int i = 0; i < newD.size(); ++i)
+    for (int i = 0; i < oldD.size(); ++i)
     {
-        taskIndexMap[newD[i].id] = i; // 将任务ID和索引映射
+        taskIndexMap[oldD[i].id] = i; // 将任务ID和索引映射
     }
     for (int i = 0; i < n; ++i)
     {
         for (int j = i + 1; j < n; ++j)
         {
-            double maxComm = 0; // 初始化最大通信代价
+            double sumComm = 0; // 初始化最大通信代价
             for (const auto &taskA : Kc[i])
             {
                 for (const auto &taskB : Kc[j])
                 {
-                    int indexA = taskIndexMap[taskA.id];          // 获取任务A的索引
-                    int indexB = taskIndexMap[taskB.id];          // 获取任务B的索引
-                    maxComm = max(maxComm, oldC[indexA][indexB]); // 更新最大通信代价
+                    int indexA = taskIndexMap[taskA.id]; // 获取任务A的索引
+                    int indexB = taskIndexMap[taskB.id]; // 获取任务B的索引
+                    sumComm += oldC[indexA][indexB];     // 更新最大通信代价
                 }
             }
-            newC[i][j] = newC[j][i] = maxComm; // 更新新的通信代价矩阵
+            newC[i][j] = newC[j][i] = sumComm; // 更新新的通信代价矩阵
         }
     }
     return newC; // 返回新的通信代价矩阵
